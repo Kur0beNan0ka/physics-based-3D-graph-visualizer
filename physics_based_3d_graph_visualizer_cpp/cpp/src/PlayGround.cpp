@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -31,6 +32,7 @@ struct AppOptions {
     bool skip_interactive = false;
     std::string video_output;
     std::string figure_output;
+    std::string render_all_figures_dir;
     bool custom_physics_iterations_per_frame = false;
     bool custom_nodes_per_frame = false;
     bool custom_theta = false;
@@ -136,6 +138,17 @@ SimulationProfile MakeSimulationProfile(int preset_id,
     profile.orbit_speed = 24.0f;
     profile.damping = 0.95f;
     return profile;
+}
+
+void RenderAllPresetFigures(const std::filesystem::path& output_dir) {
+    std::filesystem::create_directories(output_dir);
+    for (int preset_id = 1; preset_id <= 16; ++preset_id) {
+        const PuzzleConfig puzzle = MakePuzzlePreset(preset_id);
+        const std::filesystem::path figure_path =
+            output_dir / ("Figure" + std::to_string(preset_id) + ".svg");
+        WritePuzzleIllustrationSvg(puzzle, figure_path);
+        std::cout << "Rendered " << figure_path.string() << "\n";
+    }
 }
 
 bool ParseIntArg(const std::string& value, int& out) {
@@ -246,6 +259,8 @@ AppOptions ParseArgs(int argc, char** argv) {
             options.video_output = require_value("--video-output");
         } else if (arg == "--figure-output") {
             options.figure_output = require_value("--figure-output");
+        } else if (arg == "--render-all-figures") {
+            options.render_all_figures_dir = require_value("--render-all-figures");
         } else if (arg == "--hidden") {
             options.visible = false;
         } else if (arg == "--no-interactive") {
@@ -271,6 +286,7 @@ AppOptions ParseArgs(int argc, char** argv) {
                 << "  --viewing-duration <float>\n"
                 << "  --video-output <path>\n"
                 << "  --figure-output <path>\n"
+                << "  --render-all-figures <dir>\n"
                 << "  --hidden\n"
                 << "  --no-interactive\n";
             std::exit(0);
@@ -303,6 +319,12 @@ AppOptions ParseArgs(int argc, char** argv) {
 int main(int argc, char** argv) {
     try {
         const graph::AppOptions options = graph::ParseArgs(argc, argv);
+        if (!options.render_all_figures_dir.empty()) {
+            graph::RenderAllPresetFigures(options.render_all_figures_dir);
+            if (options.skip_interactive && options.video_output.empty() && options.figure_output.empty()) {
+                return 0;
+            }
+        }
         const graph::PuzzleConfig puzzle = graph::MakePuzzlePreset(options.preset_id);
         if (!options.figure_output.empty()) {
             graph::WritePuzzleIllustrationSvg(puzzle, options.figure_output);
@@ -363,6 +385,8 @@ int main(int argc, char** argv) {
         }
         renderer.SetPointSize(point_size);
         renderer.SetLineWidth(line_width);
+        renderer.ReserveGeometryBuffers(graph_data.adjacency.size(),
+                                        graph_data.undirected_edges.size() * 2U);
 
         if (!options.video_output.empty()) {
             renderer.RenderVideo(sim,

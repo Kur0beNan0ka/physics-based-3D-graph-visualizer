@@ -34,6 +34,7 @@ class GraphRenderer3D {
     void PollEvents();
     void SetPointSize(float point_size);
     void SetLineWidth(float line_width);
+    void ReserveGeometryBuffers(std::size_t max_points, std::size_t max_edge_indices);
 
     void UpdatePointGeometry(const std::vector<float>& point_vertices);
     void UpdateEdgeIndexBuffer(const std::vector<unsigned int>& edge_indices);

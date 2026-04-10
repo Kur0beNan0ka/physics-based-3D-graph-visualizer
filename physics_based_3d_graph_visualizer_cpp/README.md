@@ -64,6 +64,12 @@ scripts\build.cmd
 scripts\run.cmd
 ```
 
+Batch-render the 16 original playground puzzle layouts:
+
+```cmd
+scripts\render_all_figures.cmd
+```
+
 Recommended interactive command:
 
 ```cmd
@@ -111,6 +117,7 @@ Supported flags:
 - `--viewing-duration <float>`
 - `--video-output <path>`
 - `--figure-output <path>`
+- `--render-all-figures <dir>`
 - `--hidden`
 - `--no-interactive`
 

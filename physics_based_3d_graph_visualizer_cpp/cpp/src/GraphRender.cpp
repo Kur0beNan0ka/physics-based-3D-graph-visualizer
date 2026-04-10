@@ -308,6 +308,25 @@ void GraphRenderer3D::SetLineWidth(float line_width) {
     }
 }
 
+void GraphRenderer3D::ReserveGeometryBuffers(std::size_t max_points, std::size_t max_edge_indices) {
+    if (!window_) {
+        return;
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, point_vbo_);
+    EnsureBufferCapacity(GL_ARRAY_BUFFER,
+                         max_points * sizeof(float) * 3U,
+                         point_buffer_capacity_bytes_,
+                         GL_STREAM_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edge_ebo_);
+    EnsureBufferCapacity(GL_ELEMENT_ARRAY_BUFFER,
+                         max_edge_indices * sizeof(unsigned int),
+                         edge_buffer_capacity_bytes_,
+                         GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+}
+
 void GraphRenderer3D::UpdatePointGeometry(const std::vector<float>& point_vertices) {
     point_count_ = static_cast<GLsizei>(point_vertices.size() / 3U);
     last_points_ = point_vertices;
@@ -394,7 +413,7 @@ void GraphRenderer3D::RenderFrame(std::size_t active_nodes, std::size_t total_no
     glBindVertexArray(0);
     glfwSwapBuffers(window_);
 
-    if ((frame_counter_ % 60U) == 0U && window_) {
+    if ((frame_counter_ % 240U) == 0U && window_) {
         std::ostringstream oss;
         oss << title_ << " | Nodes " << active_nodes << "/" << total_nodes
             << " | Edges " << (edge_index_count_ / 2);
@@ -408,7 +427,7 @@ void GraphRenderer3D::RunInteractive(BfsGrowthSimulation3D& sim,
                                      int physics_iterations_per_frame,
                                      float scene_scale) {
     std::vector<float> point_vertices;
-    auto last_log = std::chrono::steady_clock::now();
+    point_vertices.reserve(sim.TotalNodeCount() * 3U);
 
     while (!ShouldClose()) {
         PollEvents();
@@ -431,14 +450,6 @@ void GraphRenderer3D::RunInteractive(BfsGrowthSimulation3D& sim,
             UpdateEdgeIndexBuffer(sim.EdgeIndices());
         }
         RenderFrame(sim.ActiveNodeCount(), sim.TotalNodeCount());
-
-        const auto now = std::chrono::steady_clock::now();
-        if (now - last_log > std::chrono::seconds(1)) {
-            last_log = now;
-            std::cout << "Active nodes: " << sim.ActiveNodeCount() << "/" << sim.TotalNodeCount()
-                      << ", active edges: " << sim.ActiveEdgeCount()
-                      << ", max|v|=" << std::fixed << std::setprecision(4) << sim.MaxVelocityMagnitude() << "\n";
-        }
     }
 }
 
@@ -464,6 +475,7 @@ void GraphRenderer3D::RenderVideo(BfsGrowthSimulation3D& sim,
                              nodes_per_frame);
 
     std::vector<float> point_vertices;
+    point_vertices.reserve(sim.TotalNodeCount() * 3U);
     while (!ShouldClose() && recorder.IsRecording()) {
         PollEvents();
         recorder.Update(1.0f / static_cast<float>(std::max(1, fps)), sim.ActiveNodeCount());
