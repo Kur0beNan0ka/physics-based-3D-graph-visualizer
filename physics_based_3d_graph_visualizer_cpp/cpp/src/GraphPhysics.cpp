@@ -246,9 +246,12 @@ BfsGrowthSimulation3D::BfsGrowthSimulation3D(const PuzzleGraphBuilder::GraphData
     if (root_node < 0 || static_cast<std::size_t>(root_node) >= graph_.adjacency.size()) {
         throw std::runtime_error("Invalid root node");
     }
+    active_nodes_.reserve(graph.adjacency.size());
+    bfs_queue_.resize(0);
     ActivateRoot(root_node);
     active_edges_.reserve(graph.undirected_edges.size());
     edge_indices_.reserve(graph.undirected_edges.size() * 2U);
+    active_edge_set_.reserve(graph.undirected_edges.size() * 2U);
 }
 
 std::size_t BfsGrowthSimulation3D::TotalNodeCount() const { return graph_.adjacency.size(); }
@@ -315,11 +318,8 @@ void BfsGrowthSimulation3D::StepPhysics(int iterations) {
         if (active_nodes_.size() > 1) {
             BarnesHutSolver bh(pos_, active_nodes_, params_.k * params_.k, params_.repulsion_theta, params_.repulsion_softening);
             const std::size_t active_count = active_nodes_.size();
-            unsigned int worker_count = static_cast<unsigned int>(params_.worker_threads > 0 ? params_.worker_threads : 0);
-            if (worker_count == 0U) {
-                worker_count = std::max(1U, std::thread::hardware_concurrency());
-            }
-            if (active_count < 2048U) {
+            unsigned int worker_count = static_cast<unsigned int>(params_.worker_threads > 0 ? params_.worker_threads : 1);
+            if (active_count < 8192U) {
                 worker_count = 1U;
             } else {
                 worker_count = std::min<unsigned int>(worker_count, static_cast<unsigned int>(active_count));

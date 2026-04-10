@@ -324,6 +324,7 @@ void GraphRenderer3D::ReserveGeometryBuffers(std::size_t max_points, std::size_t
                          max_edge_indices * sizeof(unsigned int),
                          edge_buffer_capacity_bytes_,
                          GL_DYNAMIC_DRAW);
+    uploaded_edge_index_count_ = 0;
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
@@ -348,12 +349,23 @@ void GraphRenderer3D::UpdateEdgeIndexBuffer(const std::vector<unsigned int>& edg
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, edge_ebo_);
     const std::size_t bytes = edge_indices.size() * sizeof(unsigned int);
     EnsureBufferCapacity(GL_ELEMENT_ARRAY_BUFFER, bytes, edge_buffer_capacity_bytes_, GL_DYNAMIC_DRAW);
+
     if (bytes > 0) {
-        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
-                        0,
-                        static_cast<GLsizeiptr>(bytes),
-                        edge_indices.data());
+        if (uploaded_edge_index_count_ > edge_index_count_) {
+            glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
+                            0,
+                            static_cast<GLsizeiptr>(bytes),
+                            edge_indices.data());
+        } else if (uploaded_edge_index_count_ < edge_index_count_) {
+            const std::size_t offset_indices = static_cast<std::size_t>(uploaded_edge_index_count_);
+            const std::size_t delta_indices = static_cast<std::size_t>(edge_index_count_ - uploaded_edge_index_count_);
+            glBufferSubData(GL_ELEMENT_ARRAY_BUFFER,
+                            static_cast<GLintptr>(offset_indices * sizeof(unsigned int)),
+                            static_cast<GLsizeiptr>(delta_indices * sizeof(unsigned int)),
+                            edge_indices.data() + offset_indices);
+        }
     }
+    uploaded_edge_index_count_ = edge_index_count_;
     glBindVertexArray(0);
 }
 
@@ -432,8 +444,8 @@ void GraphRenderer3D::RunInteractive(BfsGrowthSimulation3D& sim,
     while (!ShouldClose()) {
         PollEvents();
 
-        const int burst = std::max(1, static_cast<int>(sim.ActiveNodeCount() / 30U));
-        const int add_budget = std::min(std::max(1, nodes_per_frame), burst);
+        const int smooth_budget = 4 + static_cast<int>(sim.ActiveNodeCount() / 800U);
+        const int add_budget = std::min(std::max(1, nodes_per_frame), smooth_budget);
         for (int i = 0; i < add_budget; ++i) {
             if (!sim.AddNextBfsNode()) {
                 break;
@@ -481,8 +493,8 @@ void GraphRenderer3D::RenderVideo(BfsGrowthSimulation3D& sim,
         recorder.Update(1.0f / static_cast<float>(std::max(1, fps)), sim.ActiveNodeCount());
 
         if (recorder.ShouldAddNodes()) {
-            const int burst = std::max(1, static_cast<int>(sim.ActiveNodeCount() / 30U) + 1);
-            const int add_budget = std::min(recorder.NodesPerFrame(), burst);
+            const int smooth_budget = 4 + static_cast<int>(sim.ActiveNodeCount() / 800U);
+            const int add_budget = std::min(recorder.NodesPerFrame(), smooth_budget);
             for (int i = 0; i < add_budget; ++i) {
                 if (!sim.AddNextBfsNode()) {
                     break;

@@ -65,6 +65,7 @@ class GraphRenderer3D {
     GLuint edge_ebo_ = 0;
     GLsizei point_count_ = 0;
     GLsizei edge_index_count_ = 0;
+    GLsizei uploaded_edge_index_count_ = 0;
     std::size_t point_buffer_capacity_bytes_ = 0;
     std::size_t edge_buffer_capacity_bytes_ = 0;
     std::vector<float> last_points_;
