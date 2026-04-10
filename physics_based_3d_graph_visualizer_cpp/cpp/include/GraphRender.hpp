@@ -19,7 +19,7 @@ struct GraphRendererSettings {
     bool visible = true;
     float line_width = 1.15f;
     float point_size = 4.8f;
-    float orbit_speed = 30.0f;
+    float orbit_speed = 24.0f;
     float fov_degrees = 40.0f;
 };
 

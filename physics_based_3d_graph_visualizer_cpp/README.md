@@ -30,12 +30,19 @@ The older monolithic file `cpp/src/graph_bfs_visualizer.cpp` is kept as a refere
 
 Compared with the initial C++ port, the renderer now:
 
-- enables `8x MSAA`
+- enables high-quality multisample anti-aliasing
 - uses circular point sprites instead of square points
 - applies alpha blending to nodes and edges
 - frames the graph more tightly with a closer automatic camera
 - scales the scene up by default so large graphs fill the window better
 - uploads point buffers with reusable GPU capacity to reduce per-frame buffer churn
+
+The renderer now also uses:
+
+- `16x MSAA` window samples when the driver supports it
+- derivative-based smooth point edges for crisper node silhouettes
+- tighter dynamic near/far planes for better depth precision
+- a slower default orbit speed (`24`, about 20% slower than before)
 
 Rendering is still GPU-backed through OpenGL, while BFS expansion and physics remain CPU-side.
 
@@ -63,6 +70,19 @@ Recommended interactive command:
 build\graph_bfs_visualizer.exe --preset 16 --threads 4 --physics-iters 1 --nodes-per-frame 20 --theta 1.1 --scene-scale 2.2 --point-size 4.8
 ```
 
+The app now auto-selects a simulation profile per preset based on graph size and whether the puzzle is `SlidingToy` or `WalledSlidingToy`. This changes defaults such as:
+
+- `nodes_per_frame`
+- `physics_iterations_per_frame`
+- `theta`
+- `point_size`
+- `line_width`
+- `scene_scale`
+- `orbit_speed`
+- `fov`
+
+Manual CLI flags still override the auto-selected profile.
+
 ## Useful Options
 
 ```cmd
@@ -86,6 +106,8 @@ Supported flags:
 - `--point-size <float>`
 - `--line-width <float>`
 - `--scene-scale <float>`
+- `--orbit-speed <float>`
+- `--fov <float>`
 - `--viewing-duration <float>`
 - `--video-output <path>`
 - `--figure-output <path>`

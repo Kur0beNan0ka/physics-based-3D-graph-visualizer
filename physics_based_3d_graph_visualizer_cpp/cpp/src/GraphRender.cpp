@@ -124,6 +124,20 @@ float UpdateCameraDistanceHybrid(const std::vector<float>& points,
     return std::clamp(blended, min_distance, max_distance);
 }
 
+float EstimateSceneRadius(const std::vector<float>& points, const Vec3& center) {
+    if (points.empty()) {
+        return 1.0f;
+    }
+
+    const std::size_t n = points.size() / 3U;
+    float max_radius = 0.0f;
+    for (std::size_t i = 0; i < n; ++i) {
+        const Vec3 p{points[i * 3 + 0], points[i * 3 + 1], points[i * 3 + 2]};
+        max_radius = std::max(max_radius, Length(p - center));
+    }
+    return std::max(1.0f, max_radius);
+}
+
 }  // namespace
 
 GraphRenderer3D::GraphRenderer3D(GraphRendererSettings settings, std::string title)
@@ -143,7 +157,9 @@ bool GraphRenderer3D::Initialize() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_SAMPLES, 8);
+    glfwWindowHint(GLFW_SAMPLES, 16);
+    glfwWindowHint(GLFW_DEPTH_BITS, 24);
+    glfwWindowHint(GLFW_STENCIL_BITS, 8);
     glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
 
     window_ = glfwCreateWindow(settings_.width, settings_.height, title_.c_str(), nullptr, nullptr);
@@ -208,15 +224,19 @@ bool GraphRenderer3D::Initialize() {
         out vec4 FragColor;
         void main() {
             vec2 uv = gl_PointCoord * 2.0 - 1.0;
-            float r2 = dot(uv, uv);
-            if (r2 > 1.0) {
+            float r = length(uv);
+            if (r > 1.0) {
                 discard;
             }
 
-            float alpha = 1.0 - smoothstep(0.70, 1.0, r2);
-            float core = 1.0 - smoothstep(0.0, 0.42, sqrt(r2));
+            float edge = max(fwidth(r) * 1.75, 0.015);
+            float alpha = 1.0 - smoothstep(1.0 - edge, 1.0 + edge, r);
+            float core = 1.0 - smoothstep(0.0, 0.45, r);
+            float halo = 1.0 - smoothstep(0.45, 0.92, r);
             float depth_fade = clamp(1.18 - 0.00035 * vDepth, 0.82, 1.10);
-            vec3 color = mix(uColor.rgb * 0.88, vec3(1.0), core * 0.18) * depth_fade;
+            vec3 color = mix(uColor.rgb * 0.84, vec3(1.0), core * 0.20);
+            color += vec3(0.05, 0.09, 0.12) * halo * 0.22;
+            color *= depth_fade;
             FragColor = vec4(color, alpha * uColor.a);
         }
     )";
@@ -247,9 +267,11 @@ bool GraphRenderer3D::Initialize() {
     glEnable(GL_PROGRAM_POINT_SIZE);
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
+    glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_LINE_SMOOTH);
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+    glHint(GL_FRAGMENT_SHADER_DERIVATIVE_HINT, GL_NICEST);
     glPointSize(settings_.point_size);
     glLineWidth(settings_.line_width);
 
@@ -340,18 +362,21 @@ void GraphRenderer3D::RenderFrame(std::size_t active_nodes, std::size_t total_no
         target_.y + distance_ * std::sin(pitch_ * kDegToRad),
         target_.z + distance_ * std::sin(yaw_ * kDegToRad) * std::cos(pitch_ * kDegToRad),
     };
+    const float scene_radius = EstimateSceneRadius(last_points_, target_);
+    const float z_near = std::max(0.22f, distance_ - scene_radius * 1.55f);
+    const float z_far = std::max(z_near + 40.0f, distance_ + scene_radius * 2.75f + 60.0f);
 
     const Mat4 view = LookAt(eye, target_, {0.0f, 1.0f, 0.0f});
     const Mat4 proj = Perspective(settings_.fov_degrees * kDegToRad,
                                   static_cast<float>(std::max(1, fb_width)) / static_cast<float>(std::max(1, fb_height)),
-                                  0.1f,
-                                  5000.0f);
+                                  z_near,
+                                  z_far);
 
     if (edge_index_count_ > 0) {
         glUseProgram(line_program_);
         glUniformMatrix4fv(glGetUniformLocation(line_program_, "uView"), 1, GL_FALSE, view.v.data());
         glUniformMatrix4fv(glGetUniformLocation(line_program_, "uProj"), 1, GL_FALSE, proj.v.data());
-        glUniform4f(glGetUniformLocation(line_program_, "uColor"), 0.84f, 0.86f, 0.94f, 0.38f);
+        glUniform4f(glGetUniformLocation(line_program_, "uColor"), 0.86f, 0.88f, 0.95f, 0.44f);
         glBindVertexArray(edge_vao_);
         glDrawElements(GL_LINES, edge_index_count_, GL_UNSIGNED_INT, nullptr);
     }
