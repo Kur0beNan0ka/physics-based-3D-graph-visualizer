@@ -1,5 +1,4 @@
 param(
-    [string]$Source = "cpp\\src\\graph_bfs_visualizer.cpp",
     [string]$Output = "build\\graph_bfs_visualizer.exe"
 )
 
@@ -15,12 +14,21 @@ New-Item -ItemType Directory -Force $outputDir | Out-Null
 $pkgCFlags = (& pkg-config --cflags glfw3).Trim()
 $pkgLibs = (& pkg-config --libs glfw3).Trim()
 
+$sources = @(
+    (Join-Path $workspace "cpp\src\PlayGround.cpp")
+    (Join-Path $workspace "cpp\src\GraphHelper.cpp")
+    (Join-Path $workspace "cpp\src\GraphPhysics.cpp")
+    (Join-Path $workspace "cpp\src\GraphRender.cpp")
+    (Join-Path $workspace "cpp\src\Klotski.cpp")
+    (Join-Path $workspace "cpp\src\VideoRecorder.cpp")
+    (Join-Path $workspace "cpp\src\glad.c")
+)
+
 $args = @(
     "-std=c++23"
     "-O2"
     "-I$($cppRoot)\include"
-    (Join-Path $workspace $Source)
-    "$($cppRoot)\src\glad.c"
+    $sources
     "-o"
     "$outputPath"
 )
