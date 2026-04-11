@@ -45,6 +45,7 @@ class GraphRenderer3D {
                         float scene_scale);
     void RenderVideo(BfsGrowthSimulation3D& sim,
                      const std::string& output_path,
+                     const std::string& overlay_label,
                      float viewing_duration,
                      int nodes_per_frame,
                      int physics_iterations_per_frame,

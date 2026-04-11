@@ -467,6 +467,7 @@ void GraphRenderer3D::RunInteractive(BfsGrowthSimulation3D& sim,
 
 void GraphRenderer3D::RenderVideo(BfsGrowthSimulation3D& sim,
                                   const std::string& output_path,
+                                  const std::string& overlay_label,
                                   float viewing_duration,
                                   int nodes_per_frame,
                                   int physics_iterations_per_frame,
@@ -483,6 +484,7 @@ void GraphRenderer3D::RenderVideo(BfsGrowthSimulation3D& sim,
                              fb_width,
                              fb_height,
                              sim.TotalNodeCount(),
+                             overlay_label,
                              viewing_duration,
                              nodes_per_frame);
 

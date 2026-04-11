@@ -5,10 +5,14 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <optional>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 
@@ -51,7 +55,8 @@ void AlphaFillRect(std::vector<std::uint8_t>& rgb,
 void AddOverlay(std::vector<std::uint8_t>& rgb,
                 int width,
                 int height,
-                const RecorderStatus& status) {
+                const RecorderStatus& status,
+                const std::string& label) {
     if (width <= 0 || height <= 0) {
         return;
     }
@@ -76,6 +81,83 @@ void AddOverlay(std::vector<std::uint8_t>& rgb,
     AlphaFillRect(rgb, width, height, bar_x, bar_y, bar_x + bar_width, bar_y + bar_height, {60, 60, 72}, 0.85f);
     const int fill_width = static_cast<int>(std::round(bar_width * std::clamp(status.progress, 0.0f, 1.0f)));
     AlphaFillRect(rgb, width, height, bar_x, bar_y, bar_x + fill_width, bar_y + bar_height, accent, 0.95f);
+
+    if (!label.empty()) {
+        static const std::map<char, std::array<const char*, 7>> kGlyphs = {
+            {'A', {"01110","10001","10001","11111","10001","10001","10001"}},
+            {'E', {"11111","10000","10000","11110","10000","10000","11111"}},
+            {'F', {"11111","10000","10000","11110","10000","10000","10000"}},
+            {'G', {"01110","10001","10000","10111","10001","10001","01110"}},
+            {'I', {"11111","00100","00100","00100","00100","00100","11111"}},
+            {'R', {"11110","10001","10001","11110","10100","10010","10001"}},
+            {'U', {"10001","10001","10001","10001","10001","10001","01110"}},
+            {'_', {"00000","00000","00000","00000","00000","00000","11111"}},
+            {'0', {"01110","10001","10011","10101","11001","10001","01110"}},
+            {'1', {"00100","01100","00100","00100","00100","00100","01110"}},
+            {'2', {"01110","10001","00001","00010","00100","01000","11111"}},
+            {'3', {"11110","00001","00001","01110","00001","00001","11110"}},
+            {'4', {"00010","00110","01010","10010","11111","00010","00010"}},
+            {'5', {"11111","10000","10000","11110","00001","00001","11110"}},
+            {'6', {"01110","10000","10000","11110","10001","10001","01110"}},
+            {'7', {"11111","00001","00010","00100","01000","01000","01000"}},
+            {'8', {"01110","10001","10001","01110","10001","10001","01110"}},
+            {'9', {"01110","10001","10001","01111","00001","00001","01110"}},
+        };
+
+        auto draw_pixel = [&](int x, int y, const std::array<std::uint8_t, 3>& color, float alpha) {
+            if (x < 0 || y < 0 || x >= width || y >= height) {
+                return;
+            }
+            const std::size_t idx = static_cast<std::size_t>((y * width + x) * 3);
+            const float inv = 1.0f - alpha;
+            rgb[idx + 0] = static_cast<std::uint8_t>(rgb[idx + 0] * inv + color[0] * alpha);
+            rgb[idx + 1] = static_cast<std::uint8_t>(rgb[idx + 1] * inv + color[1] * alpha);
+            rgb[idx + 2] = static_cast<std::uint8_t>(rgb[idx + 2] * inv + color[2] * alpha);
+        };
+
+        const int scale = std::max(2, width / 640);
+        const int char_w = 5 * scale;
+        const int char_h = 7 * scale;
+        const int spacing = scale;
+        const int text_width = static_cast<int>(label.size()) * (char_w + spacing) - spacing;
+        const int box_pad = 10 * scale / 2;
+        const int box_x = 18;
+        const int box_y = height - char_h - box_pad * 2 - 18;
+        AlphaFillRect(rgb,
+                      width,
+                      height,
+                      box_x,
+                      box_y,
+                      box_x + text_width + box_pad * 2,
+                      box_y + char_h + box_pad * 2,
+                      {6, 8, 14},
+                      0.62f);
+
+        int cursor_x = box_x + box_pad;
+        const int cursor_y = box_y + box_pad;
+        for (char raw_ch : label) {
+            const char ch = static_cast<char>(std::toupper(static_cast<unsigned char>(raw_ch)));
+            auto it = kGlyphs.find(ch);
+            if (it != kGlyphs.end()) {
+                for (int row = 0; row < 7; ++row) {
+                    for (int col = 0; col < 5; ++col) {
+                        if (it->second[static_cast<std::size_t>(row)][col] != '1') {
+                            continue;
+                        }
+                        for (int yy = 0; yy < scale; ++yy) {
+                            for (int xx = 0; xx < scale; ++xx) {
+                                draw_pixel(cursor_x + col * scale + xx,
+                                           cursor_y + row * scale + yy,
+                                           {255, 255, 255},
+                                           0.95f);
+                            }
+                        }
+                    }
+                }
+            }
+            cursor_x += char_w + spacing;
+        }
+    }
 }
 
 std::filesystem::path MakeOutputDirectory(const std::filesystem::path& requested_output_path) {
@@ -104,6 +186,40 @@ std::filesystem::path MakeOutputDirectory(const std::filesystem::path& requested
     return parent / (stem + "_frames_" + suffix.str());
 }
 
+std::optional<std::filesystem::path> FindFfmpegExecutable() {
+    const char* path_env = std::getenv("PATH");
+    if (path_env != nullptr) {
+        std::stringstream ss(path_env);
+        std::string item;
+        while (std::getline(ss, item, ';')) {
+            if (item.empty()) {
+                continue;
+            }
+            std::filesystem::path candidate = std::filesystem::path(item) / "ffmpeg.exe";
+            if (std::filesystem::exists(candidate)) {
+                return candidate;
+            }
+        }
+    }
+
+#ifdef _WIN32
+    const char* local_appdata = std::getenv("LOCALAPPDATA");
+    if (local_appdata != nullptr) {
+        const std::filesystem::path winget_root =
+            std::filesystem::path(local_appdata) / "Microsoft" / "WinGet" / "Packages";
+        if (std::filesystem::exists(winget_root)) {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(winget_root)) {
+                if (entry.is_regular_file() &&
+                    entry.path().filename().string() == "ffmpeg.exe") {
+                    return entry.path();
+                }
+            }
+        }
+    }
+#endif
+    return std::nullopt;
+}
+
 }  // namespace
 
 AutoVideoRecorder::AutoVideoRecorder(int fps) : fps_(std::max(1, fps)) {}
@@ -116,6 +232,7 @@ void AutoVideoRecorder::StartAutoRender(const std::string& output_path,
                                         int width,
                                         int height,
                                         std::size_t total_nodes,
+                                        std::string overlay_label,
                                         float viewing_duration,
                                         int nodes_per_frame) {
     Stop();
@@ -134,6 +251,8 @@ void AutoVideoRecorder::StartAutoRender(const std::string& output_path,
     total_frames_ = 0;
     requested_output_path_ = output_path;
     output_directory_ = MakeOutputDirectory(requested_output_path_);
+    overlay_label_ = std::move(overlay_label);
+    encode_succeeded_ = false;
     std::filesystem::create_directories(output_directory_);
     frame_queue_.clear();
 
@@ -185,7 +304,7 @@ void AutoVideoRecorder::CaptureFrame() {
         std::copy_n(pixels.data() + src, static_cast<std::size_t>(width_ * 3), flipped.data() + dst);
     }
 
-    AddOverlay(flipped, width_, height_, CurrentStatus());
+    AddOverlay(flipped, width_, height_, CurrentStatus(), overlay_label_);
 
     std::unique_lock lock(mutex_);
     if (frame_queue_.size() >= 120U) {
@@ -199,6 +318,9 @@ void AutoVideoRecorder::CaptureFrame() {
 }
 
 void AutoVideoRecorder::Stop() {
+    if (!is_recording_ && !writer_thread_.joinable() && stop_writer_) {
+        return;
+    }
     {
         std::lock_guard lock(mutex_);
         is_recording_ = false;
@@ -208,6 +330,7 @@ void AutoVideoRecorder::Stop() {
     if (writer_thread_.joinable()) {
         writer_thread_.join();
     }
+    EncodeVideoIfPossible();
     WriteManifest();
 }
 
@@ -307,10 +430,46 @@ void AutoVideoRecorder::WriteManifest() const {
     out << "Stored frames: " << total_frames_ << "\n";
     out << "Resolution: " << width_ << "x" << height_ << "\n";
     out << "FPS: " << fps_ << "\n\n";
-    out << "Frames are stored as PPM images so the project stays dependency-free.\n";
-    out << "To encode them into H.264 later, install ffmpeg and run:\n\n";
+    out << "Overlay label: " << overlay_label_ << "\n";
+    out << "Encode succeeded: " << (encode_succeeded_ ? "yes" : "no") << "\n\n";
+    out << "Frames are stored as PPM images in this directory.\n";
+    out << "Manual ffmpeg fallback:\n\n";
     out << "ffmpeg -framerate " << fps_
-        << " -i frame_%06d.ppm -pix_fmt yuv420p output.mp4\n";
+        << " -i frame_%06d.ppm -c:v libx264 -pix_fmt yuv420p output.mp4\n";
+}
+
+void AutoVideoRecorder::EncodeVideoIfPossible() {
+    if (requested_output_path_.empty()) {
+        return;
+    }
+
+    std::filesystem::path target = requested_output_path_;
+    if (target.extension().empty()) {
+        target.replace_extension(".mp4");
+    }
+
+    const std::filesystem::path frame_pattern = output_directory_ / "frame_%06d.ppm";
+    const auto ffmpeg_path = FindFfmpegExecutable();
+    if (!ffmpeg_path.has_value()) {
+        std::cerr << "ffmpeg executable not found. Keeping frame sequence only.\n";
+        return;
+    }
+    std::ostringstream cmd;
+    cmd << "cmd /c \"\""<< ffmpeg_path->string() << "\" -y -loglevel error -framerate " << fps_
+        << " -i \"" << frame_pattern.string() << "\" -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p "
+        << "\"" << target.string() << "\"\"";
+
+    const int rc = std::system(cmd.str().c_str());
+    if (rc == 0 && std::filesystem::exists(target)) {
+        encode_succeeded_ = true;
+        for (const auto& entry : std::filesystem::directory_iterator(output_directory_)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".ppm") {
+                std::filesystem::remove(entry.path());
+            }
+        }
+    } else {
+        std::cerr << "ffmpeg encode failed for " << target.string() << "\n";
+    }
 }
 
 }  // namespace graph

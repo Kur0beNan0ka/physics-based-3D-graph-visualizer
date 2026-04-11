@@ -31,6 +31,7 @@ struct AppOptions {
     bool visible = true;
     bool skip_interactive = false;
     std::string video_output;
+    std::string video_label;
     std::string figure_output;
     std::string render_all_figures_dir;
     bool custom_physics_iterations_per_frame = false;
@@ -257,6 +258,8 @@ AppOptions ParseArgs(int argc, char** argv) {
             }
         } else if (arg == "--video-output") {
             options.video_output = require_value("--video-output");
+        } else if (arg == "--video-label") {
+            options.video_label = require_value("--video-label");
         } else if (arg == "--figure-output") {
             options.figure_output = require_value("--figure-output");
         } else if (arg == "--render-all-figures") {
@@ -285,6 +288,7 @@ AppOptions ParseArgs(int argc, char** argv) {
                 << "  --fov <float>\n"
                 << "  --viewing-duration <float>\n"
                 << "  --video-output <path>\n"
+                << "  --video-label <text>\n"
                 << "  --figure-output <path>\n"
                 << "  --render-all-figures <dir>\n"
                 << "  --hidden\n"
@@ -347,6 +351,9 @@ int main(int argc, char** argv) {
         const float scene_scale = options.custom_scene_scale ? options.scene_scale : profile.scene_scale;
         const float orbit_speed = options.custom_orbit_speed ? options.orbit_speed : profile.orbit_speed;
         const float fov_degrees = options.custom_fov_degrees ? options.fov_degrees : profile.fov_degrees;
+        const std::string video_label = options.video_label.empty()
+                                            ? std::string("Figure_") + std::to_string(options.preset_id)
+                                            : options.video_label;
 
         std::cout << "Preset profile: " << profile.preset_name
                   << " | nodes=" << graph_data.adjacency.size()
@@ -391,6 +398,7 @@ int main(int argc, char** argv) {
         if (!options.video_output.empty()) {
             renderer.RenderVideo(sim,
                                  options.video_output,
+                                 video_label,
                                  options.viewing_duration,
                                  nodes_per_frame,
                                  physics_iterations_per_frame,

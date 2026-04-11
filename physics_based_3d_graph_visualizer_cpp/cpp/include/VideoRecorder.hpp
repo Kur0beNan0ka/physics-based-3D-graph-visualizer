@@ -38,6 +38,7 @@ class AutoVideoRecorder {
                          int width,
                          int height,
                          std::size_t total_nodes,
+                         std::string overlay_label = {},
                          float viewing_duration = 8.0f,
                          int nodes_per_frame = 2);
     RecorderStatus Update(float delta_time, std::size_t current_node_count);
@@ -73,6 +74,8 @@ class AutoVideoRecorder {
     std::uint64_t total_frames_ = 0;
     std::filesystem::path requested_output_path_;
     std::filesystem::path output_directory_;
+    std::string overlay_label_;
+    bool encode_succeeded_ = false;
 
     mutable std::mutex mutex_;
     std::condition_variable queue_cv_;
@@ -85,6 +88,7 @@ class AutoVideoRecorder {
     RecorderStatus CurrentStatus() const;
     void WriterLoop();
     void WriteManifest() const;
+    void EncodeVideoIfPossible();
 };
 
 }  // namespace graph
